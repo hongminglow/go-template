@@ -31,6 +31,13 @@ func main() {
 		log.Fatalf("failed to ensure database schema: %v", err)
 	}
 
+	if err := database.SeedDefaultData(rootCtx, dbPool, database.SeedConfig{
+		AdminName:  cfg.SeedAdminName,
+		AdminEmail: cfg.SeedAdminEmail,
+	}); err != nil {
+		log.Fatalf("failed to seed default data: %v", err)
+	}
+
 	systemHandler := system.New(dbPool, cfg)
 
 	userRepository := user.NewRepository(dbPool)

@@ -10,6 +10,7 @@ It gives beginners a clean structure, real API flow, Docker support, and Postgre
 - PostgreSQL connection pool with `pgx`
 - Health and readiness handlers (`/healthz`, `/readyz`)
 - User CRUD module with layered architecture (handler/service/repository/model)
+- Startup seed for default admin user (`admin@email.com`)
 - Dockerfile + Docker Compose setup
 - Environment-based configuration (`.env`)
 
@@ -59,6 +60,12 @@ go run .
 
 By default, the server runs on `http://localhost:8080`.
 
+At startup, the app also seeds a default admin user (idempotent):
+- Name from `SEED_ADMIN_NAME` (default: `Admin`)
+- Email from `SEED_ADMIN_EMAIL` (default: `admin@email.com`)
+
+If the email already exists, the seed updates the name and keeps the same user record.
+
 ### 5. Verify everything is working
 
 ```bash
@@ -82,6 +89,8 @@ List users:
 ```bash
 curl localhost:8080/api/v1/users
 ```
+
+You should see at least the seeded admin user.
 
 Get user by id:
 
@@ -111,6 +120,12 @@ docker compose up --build
 ```
 
 This starts both app + database together.
+
+If you changed Go code, restart/rebuild the app container:
+
+```bash
+docker compose up -d --build app
+```
 
 ## Useful commands for beginners
 

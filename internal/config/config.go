@@ -12,6 +12,9 @@ type Config struct {
 
 	HTTPAddr string
 
+	SeedAdminName  string
+	SeedAdminEmail string
+
 	PostgresHost     string
 	PostgresPort     string
 	PostgresUser     string
@@ -26,6 +29,9 @@ func FromEnv() Config {
 		AppEnv:  getEnv("APP_ENV", "development"),
 
 		HTTPAddr: getEnv("HTTP_ADDR", ":8080"),
+
+		SeedAdminName:  getEnv("SEED_ADMIN_NAME", "Admin"),
+		SeedAdminEmail: getEnv("SEED_ADMIN_EMAIL", "admin@email.com"),
 
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),
