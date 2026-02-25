@@ -8,14 +8,14 @@ It gives beginners a clean structure, real API flow, Docker support, and Postgre
 - Router setup with `chi`
 - Basic middleware (request id, logging, recovery, timeout)
 - PostgreSQL connection pool with `pgx`
-- Starter API handlers (`/`, `/healthz`, `/readyz`, `/api/v1/hello`)
+- Health and readiness handlers (`/healthz`, `/readyz`)
+- User CRUD module with layered architecture (handler/service/repository/model)
 - Dockerfile + Docker Compose setup
 - Environment-based configuration (`.env`)
 
 ## What we are planning to add next
 
 - Strong authentication flow (login, token handling, secure password strategy)
-- Simple User CRUD APIs
 - Better validation and standardized API error responses
 - Database migrations and seed examples
 - More test examples for beginners
@@ -67,6 +67,42 @@ curl localhost:8080/readyz
 curl localhost:8080/api/v1/hello
 ```
 
+### 6. Try User CRUD endpoints
+
+Create a user:
+
+```bash
+curl -X POST localhost:8080/api/v1/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Alice","email":"alice@example.com"}'
+```
+
+List users:
+
+```bash
+curl localhost:8080/api/v1/users
+```
+
+Get user by id:
+
+```bash
+curl localhost:8080/api/v1/users/1
+```
+
+Update user:
+
+```bash
+curl -X PUT localhost:8080/api/v1/users/1 \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Alice Updated","email":"alice.updated@example.com"}'
+```
+
+Delete user:
+
+```bash
+curl -X DELETE localhost:8080/api/v1/users/1
+```
+
 ## Run everything with Docker
 
 ```bash
@@ -91,9 +127,11 @@ docker compose down -v     # stop + remove database volume
 .
 ├── internal/
 │   ├── config/      # env config + DSN builder
-│   ├── database/    # postgres pool setup
-│   ├── handler/     # HTTP handlers
-│   └── server/      # router + middleware
+│   ├── database/    # postgres pool + schema bootstrap
+│   ├── httpx/       # shared HTTP helpers (JSON request/response)
+│   ├── server/      # router + middleware
+│   ├── system/      # root/health/readiness handlers
+│   └── user/        # user module (handler, service, repository, model)
 ├── main.go          # app bootstrap and graceful shutdown
 ├── Dockerfile
 └── docker-compose.yml

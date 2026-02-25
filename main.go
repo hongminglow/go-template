@@ -10,8 +10,9 @@ import (
 
 	"github.com/hongminglow/go-template/internal/config"
 	"github.com/hongminglow/go-template/internal/database"
-	"github.com/hongminglow/go-template/internal/handler"
 	"github.com/hongminglow/go-template/internal/server"
+	"github.com/hongminglow/go-template/internal/system"
+	"github.com/hongminglow/go-template/internal/user"
 )
 
 func main() {
@@ -26,8 +27,17 @@ func main() {
 	}
 	defer dbPool.Close()
 
-	h := handler.New(dbPool, cfg)
-	router := server.NewRouter(h)
+	if err := database.EnsureSchema(rootCtx, dbPool); err != nil {
+		log.Fatalf("failed to ensure database schema: %v", err)
+	}
+
+	systemHandler := system.New(dbPool, cfg)
+
+	userRepository := user.NewRepository(dbPool)
+	userService := user.NewService(userRepository)
+	userHandler := user.NewHTTPHandler(userService)
+
+	router := server.NewRouter(systemHandler, userHandler)
 
 	httpServer := &http.Server{
 		Addr:         cfg.HTTPAddr,
