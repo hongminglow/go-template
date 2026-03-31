@@ -7,16 +7,11 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hongminglow/go-template/internal/httpx"
+	"github.com/hongminglow/go-template/internal/pkg/httpx"
 )
 
 type HTTPHandler struct {
-	service *Service
-}
-
-type createUserRequest struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	service   *Service
 }
 
 type updateUserRequest struct {
@@ -26,30 +21,11 @@ type updateUserRequest struct {
 
 func NewHTTPHandler(service *Service) *HTTPHandler {
 	return &HTTPHandler{
-		service: service,
+		service:   service,
 	}
 }
 
-func (h *HTTPHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req createUserRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
 
-	createdUser, err := h.service.Create(r.Context(), CreateInput{
-		Name:  req.Name,
-		Email: req.Email,
-	})
-	if err != nil {
-		handleUserError(w, err)
-		return
-	}
-
-	httpx.WriteJSON(w, http.StatusCreated, map[string]any{
-		"data": createdUser,
-	})
-}
 
 func (h *HTTPHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit, err := parseQueryInt32(r, "limit")
@@ -161,10 +137,12 @@ func handleUserError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrUserNotFound):
 		httpx.WriteError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, ErrEmailAlreadyUsed):
+	case errors.Is(err, ErrEmailAlreadyUsed), errors.Is(err, ErrUsernameAlreadyUsed):
 		httpx.WriteError(w, http.StatusConflict, err.Error())
-	case errors.Is(err, ErrInvalidName), errors.Is(err, ErrInvalidEmail):
+	case errors.Is(err, ErrInvalidName), errors.Is(err, ErrInvalidEmail), errors.Is(err, ErrInvalidPassword):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, ErrInvalidCredentials):
+		httpx.WriteError(w, http.StatusUnauthorized, err.Error())
 	default:
 		log.Printf("unexpected user module error: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")

@@ -2,8 +2,14 @@ package user
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/mail"
 	"strings"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -13,12 +19,14 @@ const (
 )
 
 type Service struct {
-	repo Repository
+	repo  Repository
+	cache *redis.Client
 }
 
-func NewService(repo Repository) *Service {
+func NewService(repo Repository, cache *redis.Client) *Service {
 	return &Service{
-		repo: repo,
+		repo:  repo,
+		cache: cache,
 	}
 }
 
@@ -27,6 +35,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(normalizedInput.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return User{}, fmt.Errorf("hash password failed: %w", err)
+	}
+	normalizedInput.Password = string(hashedPassword)
 
 	return s.repo.Create(ctx, normalizedInput)
 }
@@ -42,6 +56,51 @@ func (s *Service) List(ctx context.Context, limit, offset int32) ([]User, error)
 
 func (s *Service) GetByID(ctx context.Context, id int64) (User, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *Service) Auth(ctx context.Context, email, password string) (User, error) {
+	normalizedEmail, err := normalizeEmail(email)
+	if err != nil {
+		return User{}, ErrInvalidCredentials
+	}
+
+	u, err := s.repo.GetByEmail(ctx, normalizedEmail)
+	if err != nil {
+		return User{}, ErrInvalidCredentials
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
+	if err != nil {
+		return User{}, ErrInvalidCredentials
+	}
+
+	return u, nil
+}
+
+func (s *Service) GetProfile(ctx context.Context, id int64) (User, error) {
+	cacheKey := fmt.Sprintf("user:profile:%d", id)
+
+	// Try reading from Redis first
+	cachedData, err := s.cache.Get(ctx, cacheKey).Result()
+	if err == nil {
+		var u User
+		if err := json.Unmarshal([]byte(cachedData), &u); err == nil {
+			return u, nil
+		}
+	}
+
+	// Fallback to database
+	u, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return User{}, err
+	}
+
+	// Save back to Redis with 5 minutes TTL
+	if bytes, err := json.Marshal(u); err == nil {
+		_ = s.cache.Set(ctx, cacheKey, bytes, 5*time.Minute).Err()
+	}
+
+	return u, nil
 }
 
 func (s *Service) Update(ctx context.Context, id int64, input UpdateInput) (User, error) {
@@ -68,9 +127,26 @@ func normalizeCreateInput(input CreateInput) (CreateInput, error) {
 		return CreateInput{}, err
 	}
 
+	username := strings.TrimSpace(input.Username)
+	if username == "" {
+		return CreateInput{}, ErrInvalidName
+	}
+
+	gender := strings.TrimSpace(input.Gender)
+	if gender == "" {
+		gender = "unspecified"
+	}
+
+	if len(input.Password) < 6 {
+		return CreateInput{}, ErrInvalidPassword
+	}
+
 	return CreateInput{
-		Name:  name,
-		Email: email,
+		Username: username,
+		Name:     name,
+		Email:    email,
+		Password: input.Password,
+		Gender:   gender,
 	}, nil
 }
 

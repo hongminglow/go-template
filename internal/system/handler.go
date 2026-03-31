@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hongminglow/go-template/internal/config"
-	"github.com/hongminglow/go-template/internal/httpx"
+	"github.com/hongminglow/go-template/internal/pkg/httpx"
 )
 
 type dbPinger interface {

@@ -8,8 +8,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hongminglow/go-template/internal/auth"
 	"github.com/hongminglow/go-template/internal/config"
-	"github.com/hongminglow/go-template/internal/database"
+	"github.com/hongminglow/go-template/internal/infrastructure/cache"
+	"github.com/hongminglow/go-template/internal/infrastructure/postgres"
 	"github.com/hongminglow/go-template/internal/server"
 	"github.com/hongminglow/go-template/internal/system"
 	"github.com/hongminglow/go-template/internal/user"
@@ -21,30 +23,37 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	dbPool, err := database.NewPostgresPool(rootCtx, cfg.PostgresDSN())
+	dbPool, err := postgres.NewPostgresPool(rootCtx, cfg.PostgresDSN())
 	if err != nil {
 		log.Fatalf("failed to initialize postgres pool: %v", err)
 	}
 	defer dbPool.Close()
 
-	if err := database.EnsureSchema(rootCtx, dbPool); err != nil {
+	if err := postgres.EnsureSchema(rootCtx, dbPool); err != nil {
 		log.Fatalf("failed to ensure database schema: %v", err)
 	}
 
-	if err := database.SeedDefaultData(rootCtx, dbPool, database.SeedConfig{
+	if err := postgres.SeedDefaultData(rootCtx, dbPool, postgres.SeedConfig{
 		AdminName:  cfg.SeedAdminName,
 		AdminEmail: cfg.SeedAdminEmail,
 	}); err != nil {
 		log.Fatalf("failed to seed default data: %v", err)
 	}
 
+	redisPool, err := cache.NewRedisClient(rootCtx, cfg.RedisHost, cfg.RedisPort, cfg.RedisPassword)
+	if err != nil {
+		log.Fatalf("failed to initialize redis pool: %v", err)
+	}
+	defer redisPool.Close()
+
 	systemHandler := system.New(dbPool, cfg)
 
 	userRepository := user.NewRepository(dbPool)
-	userService := user.NewService(userRepository)
+	userService := user.NewService(userRepository, redisPool)
 	userHandler := user.NewHTTPHandler(userService)
+	authHandler := auth.NewHTTPHandler(userService, cfg.JWTSecret)
 
-	router := server.NewRouter(systemHandler, userHandler)
+	router := server.NewRouter(systemHandler, userHandler, authHandler, cfg)
 
 	httpServer := &http.Server{
 		Addr:         cfg.HTTPAddr,

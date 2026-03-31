@@ -21,6 +21,12 @@ type Config struct {
 	PostgresPassword string
 	PostgresDB       string
 	PostgresSSLMode  string
+
+	RedisHost     string
+	RedisPort     string
+	RedisPassword string
+
+	JWTSecret string
 }
 
 func FromEnv() Config {
@@ -39,6 +45,12 @@ func FromEnv() Config {
 		PostgresPassword: getEnv("POSTGRES_PASSWORD", "postgres"),
 		PostgresDB:       getEnv("POSTGRES_DB", "app_db"),
 		PostgresSSLMode:  getEnv("POSTGRES_SSL_MODE", "disable"),
+
+		RedisHost:     getEnv("REDIS_HOST", "localhost"),
+		RedisPort:     getEnv("REDIS_PORT", "6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+
+		JWTSecret: getEnv("JWT_SECRET", "super-secret-default-key-change-me"),
 	}
 }
 

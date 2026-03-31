@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,6 +15,7 @@ type Repository interface {
 	Create(ctx context.Context, input CreateInput) (User, error)
 	List(ctx context.Context, opts ListOptions) ([]User, error)
 	GetByID(ctx context.Context, id int64) (User, error)
+	GetByEmail(ctx context.Context, email string) (User, error)
 	Update(ctx context.Context, id int64, input UpdateInput) (User, error)
 	Delete(ctx context.Context, id int64) error
 }
@@ -28,16 +30,19 @@ func NewRepository(db *pgxpool.Pool) *PGRepository {
 
 func (r *PGRepository) Create(ctx context.Context, input CreateInput) (User, error) {
 	const query = `
-		INSERT INTO users (name, email)
-		VALUES ($1, $2)
-		RETURNING id, name, email, created_at, updated_at
+		INSERT INTO users (username, name, email, password, gender)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, username, name, email, password, gender, created_at, updated_at
 	`
 
 	var u User
-	err := r.db.QueryRow(ctx, query, input.Name, input.Email).Scan(
+	err := r.db.QueryRow(ctx, query, input.Username, input.Name, input.Email, input.Password, input.Gender).Scan(
 		&u.ID,
+		&u.Username,
 		&u.Name,
 		&u.Email,
+		&u.Password,
+		&u.Gender,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -53,7 +58,7 @@ func (r *PGRepository) Create(ctx context.Context, input CreateInput) (User, err
 
 func (r *PGRepository) List(ctx context.Context, opts ListOptions) ([]User, error) {
 	const query = `
-		SELECT id, name, email, created_at, updated_at
+		SELECT id, username, name, email, password, gender, created_at, updated_at
 		FROM users
 		ORDER BY id ASC
 		LIMIT $1 OFFSET $2
@@ -70,8 +75,11 @@ func (r *PGRepository) List(ctx context.Context, opts ListOptions) ([]User, erro
 		var u User
 		if err := rows.Scan(
 			&u.ID,
+			&u.Username,
 			&u.Name,
 			&u.Email,
+			&u.Password,
+			&u.Gender,
 			&u.CreatedAt,
 			&u.UpdatedAt,
 		); err != nil {
@@ -89,7 +97,7 @@ func (r *PGRepository) List(ctx context.Context, opts ListOptions) ([]User, erro
 
 func (r *PGRepository) GetByID(ctx context.Context, id int64) (User, error) {
 	const query = `
-		SELECT id, name, email, created_at, updated_at
+		SELECT id, username, name, email, password, gender, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -97,8 +105,11 @@ func (r *PGRepository) GetByID(ctx context.Context, id int64) (User, error) {
 	var u User
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&u.ID,
+		&u.Username,
 		&u.Name,
 		&u.Email,
+		&u.Password,
+		&u.Gender,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -112,19 +123,50 @@ func (r *PGRepository) GetByID(ctx context.Context, id int64) (User, error) {
 	return u, nil
 }
 
+func (r *PGRepository) GetByEmail(ctx context.Context, email string) (User, error) {
+	const query = `
+		SELECT id, username, name, email, password, gender, created_at, updated_at
+		FROM users
+		WHERE email = $1
+	`
+
+	var u User
+	err := r.db.QueryRow(ctx, query, email).Scan(
+		&u.ID,
+		&u.Username,
+		&u.Name,
+		&u.Email,
+		&u.Password,
+		&u.Gender,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+	if err != nil {
+		if known := mapRepositoryError(err); known != nil {
+			return User{}, known
+		}
+		return User{}, fmt.Errorf("get user by email: %w", err)
+	}
+
+	return u, nil
+}
+
 func (r *PGRepository) Update(ctx context.Context, id int64, input UpdateInput) (User, error) {
 	const query = `
 		UPDATE users
 		SET name = $2, email = $3, updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, name, email, created_at, updated_at
+		RETURNING id, username, name, email, password, gender, created_at, updated_at
 	`
 
 	var u User
 	err := r.db.QueryRow(ctx, query, id, input.Name, input.Email).Scan(
 		&u.ID,
+		&u.Username,
 		&u.Name,
 		&u.Email,
+		&u.Password,
+		&u.Gender,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -161,6 +203,9 @@ func mapRepositoryError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		if pgErr.Code == "23505" {
+			if strings.Contains(pgErr.ConstraintName, "username") {
+				return ErrUsernameAlreadyUsed
+			}
 			return ErrEmailAlreadyUsed
 		}
 	}

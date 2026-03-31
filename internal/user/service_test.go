@@ -35,6 +35,10 @@ func (s *stubRepository) GetByID(_ context.Context, _ int64) (User, error) {
 	return s.getUser, nil
 }
 
+func (s *stubRepository) GetByEmail(_ context.Context, _ string) (User, error) {
+	return User{}, ErrUserNotFound
+}
+
 func (s *stubRepository) Update(_ context.Context, _ int64, input UpdateInput) (User, error) {
 	s.updateInput = input
 	return s.updateUser, nil
@@ -49,11 +53,14 @@ func TestServiceCreate_NormalizesInput(t *testing.T) {
 	repo := &stubRepository{
 		createUser: User{ID: 1},
 	}
-	service := NewService(repo)
+	service := NewService(repo, nil)
 
 	_, err := service.Create(context.Background(), CreateInput{
-		Name:  "  Alice  ",
-		Email: "  ALICE@example.com ",
+		Name:     "  Alice  ",
+		Email:    " ALICE@example.COM ",
+		Username: "alice_admin",
+		Password: "password123",
+		Gender:   "female",
 	})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -70,11 +77,14 @@ func TestServiceCreate_NormalizesInput(t *testing.T) {
 
 func TestServiceCreate_InvalidEmail(t *testing.T) {
 	repo := &stubRepository{}
-	service := NewService(repo)
+	service := NewService(repo, nil)
 
 	_, err := service.Create(context.Background(), CreateInput{
-		Name:  "Alice",
-		Email: "not-an-email",
+		Name:     "Alice",
+		Email:    "invalid-email",
+		Username: "alice_admin",
+		Password: "password123",
+		Gender:   "female",
 	})
 	if !errors.Is(err, ErrInvalidEmail) {
 		t.Fatalf("expected ErrInvalidEmail, got %v", err)
@@ -83,7 +93,7 @@ func TestServiceCreate_InvalidEmail(t *testing.T) {
 
 func TestServiceList_SanitizesPagination(t *testing.T) {
 	repo := &stubRepository{}
-	service := NewService(repo)
+	service := NewService(repo, nil)
 
 	_, err := service.List(context.Background(), 999, -5)
 	if err != nil {
