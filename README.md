@@ -40,6 +40,7 @@ go mod tidy
 ```
 
 What `go mod tidy` does:
+
 - Adds missing modules required by your imports
 - Removes modules you do not use anymore
 - Updates `go.sum` checksums so builds are reproducible
@@ -61,6 +62,7 @@ go run .
 By default, the server runs on `http://localhost:8080`.
 
 At startup, the app also seeds a default admin user (idempotent):
+
 - Name from `SEED_ADMIN_NAME` (default: `Admin`)
 - Email from `SEED_ADMIN_EMAIL` (default: `admin@email.com`)
 
@@ -151,3 +153,4 @@ docker compose down -v     # stop + remove database volume
 ├── Dockerfile
 └── docker-compose.yml
 ```
+
