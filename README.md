@@ -48,7 +48,7 @@ What `go mod tidy` does:
 ### 3. Start PostgreSQL with Docker
 
 ```bash
-docker compose up -d db
+docker compose up -d db redis
 ```
 
 This runs only the Postgres service in background mode.
@@ -56,7 +56,7 @@ This runs only the Postgres service in background mode.
 ### 4. Run the Go application
 
 ```bash
-go run .
+go run ./cmd/api
 ```
 
 By default, the server runs on `http://localhost:8080`.

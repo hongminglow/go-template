@@ -10,7 +10,7 @@ Before testing, ensure your application dependencies (PostgreSQL and Redis) and 
 
 1. **Start the database and cache using Docker:**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 2. **Start the Go server:**
    ```bash
