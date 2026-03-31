@@ -138,19 +138,56 @@ docker compose down        # stop services
 docker compose down -v     # stop + remove database volume
 ```
 
-## Project structure
+## Enterprise Standard Project Structure
+
+This template uses a simplified structure for beginners, but it's designed to seamlessly scale into the **Go Standard Layout** used by enterprise teams. 
+
+Here is how a fully-fledged Go enterprise application is typically structured, and where you should place your DTOs, API endpoints, and third-party libraries (like Redis):
 
 ```text
 .
-├── internal/
-│   ├── config/      # env config + DSN builder
-│   ├── database/    # postgres pool + schema bootstrap
-│   ├── httpx/       # shared HTTP helpers (JSON request/response)
-│   ├── server/      # router + middleware
-│   ├── system/      # root/health/readiness handlers
-│   └── user/        # user module (handler, service, repository, model)
-├── main.go          # app bootstrap and graceful shutdown
+├── cmd/
+│   ├── api/               # The main entrypoint for your HTTP server (moves main.go here)
+│   └── worker/            # Entrypoint for background sync workers or CRONs
+│
+├── internal/              # Private application code (cannot be imported by other repos)
+│   │
+│   ├── config/            # Env config + DB credentials builder
+│   ├── server/            # Router + middleware (The API endpoints mapping)
+│   │
+│   ├── user/              # A Domain Module (Feature-based grouping)
+│   │   ├── handler.go     # HTTP handlers executing logic for endpoints
+│   │   ├── service.go     # Core Business logic (Interfaces & Implementations)
+│   │   ├── repository.go  # Database queries specific to the User domain
+│   │   ├── model.go       # Core DB Models / Entities
+│   │   └── dto.go         # Data Transfer Objects (Requests/Responses shape)
+│   │
+│   ├── infrastructure/    # Third-party implementations and external resources
+│   │   ├── cache/         # Redis connection and shared caching logic
+│   │   ├── storage/       # AWS S3 / Google Cloud Storage wrappers
+│   │   ├── payment/       # Stripe / PayPal clients
+│   │   └── postgres/      # Global DB pool / Schema bootstrap
+│   │
+│   └── pkg/               # Shared, private project-wide helpers
+│       └── httpx/         # Shared HTTP helpers (JSON parse/respond)
+│
+├── pkg/                   # PUBLIC libraries you author that other repos CAN import (optional)
+├── api/                   # OpenAPI/Swagger specs, Protocol Buffers definitions
 ├── Dockerfile
 └── docker-compose.yml
 ```
+
+### Where to store specific components?
+
+1. **DTOs (Data Transfer Objects)**:
+   - Place them close to the handlers that use them. Usually, inside the domain module folder as `dto.go` (e.g., `internal/user/dto.go`), or define request/response types at the top of the `handler.go` file.
+   - For highly complex APIs, teams sometimes create an `api/types/` package, but domain-driven structures prefer keeping them tightly scoped.
+2. **API Endpoints**: 
+   - The actual route mapping (e.g., `router.Get("/users", ...)` or `router.Post("/users", ...)`) lives centrally in `internal/server/router.go`. 
+   - The execution code for that endpoint sits in the Module's Handler (e.g., `internal/user/handler.go`).
+3. **Third-Party Libraries (Redis, Stripe, AWS)**: 
+   - Store these in an `internal/infrastructure/` folder. For example, your Redis initiator goes in `internal/infrastructure/cache`, and your email functionality inside `internal/infrastructure/email`.
+   - Your `service.go` should only depend on an *interface* (e.g., `type Cache interface`), and the concrete Redis implementation from `/infrastructure` is injected into the service. 
+4. **`cmd/` Directory (The Enterprise Standard)**:
+   - Instead of a single `main.go` at the root, enterprise apps move it to `cmd/api/main.go`. This allows one repository to host multiple executables flawlessly (such as `cmd/migration/main.go` or `cmd/cron/main.go`).
 
