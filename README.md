@@ -68,7 +68,17 @@ At startup, the app also seeds a default admin user (idempotent):
 
 If the email already exists, the seed updates the name and keeps the same user record.
 
-### 5. Verify everything is working
+### 5. Database Migrations
+
+The project uses `golang-migrate` for versioned schema management.
+
+- **Startup Sync:** The application calls `postgres.EnsureSchema()` on startup. It automatically scans the `migrations/` folder and applies any pending `.up.sql` files.
+- **Manual Control (CLI):**
+  - Install: `brew install golang-migrate`
+  - Create new migration: `migrate create -ext sql -dir migrations -seq <name>`
+- **Check Status:** Query the `schema_migrations` table in your database to see which version you're on.
+
+### 6. Verify everything is working
 
 ```bash
 curl localhost:8080/healthz

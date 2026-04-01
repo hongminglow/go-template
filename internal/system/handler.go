@@ -40,6 +40,13 @@ func (h *Handler) Hello(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// Health godoc
+// @Summary      Health Check
+// @Description  Check if the application is healthy
+// @Tags         system
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Router       /api/v1/health [get]
 func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",

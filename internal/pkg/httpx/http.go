@@ -10,10 +10,22 @@ import (
 
 const maxBodySize = 1 << 20 // 1MB
 
+// Problem represents an RFC 7807 error response.
+type Problem struct {
+	Type     string         `json:"type"`
+	Title    string         `json:"title"`
+	Status   int            `json:"status"`
+	Detail   string         `json:"detail,omitempty"`
+	Instance string         `json:"instance,omitempty"`
+	Errors   map[string]any `json:"errors,omitempty"`
+}
+
 func WriteJSON(w http.ResponseWriter, statusCode int, data any) {
 	payload, err := json.Marshal(data)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"title":"Internal Server Error","status":500}`))
 		return
 	}
 
@@ -22,10 +34,18 @@ func WriteJSON(w http.ResponseWriter, statusCode int, data any) {
 	_, _ = w.Write(append(payload, '\n'))
 }
 
-func WriteError(w http.ResponseWriter, statusCode int, message string) {
-	WriteJSON(w, statusCode, map[string]string{
-		"error": message,
+// WriteProblem writes an RFC 7807 problem response.
+func WriteProblem(w http.ResponseWriter, statusCode int, title string, detail string) {
+	WriteJSON(w, statusCode, Problem{
+		Type:   fmt.Sprintf("https://httpstatuses.com/%d", statusCode),
+		Title:  title,
+		Status: statusCode,
+		Detail: detail,
 	})
+}
+
+func WriteError(w http.ResponseWriter, statusCode int, message string) {
+	WriteProblem(w, statusCode, http.StatusText(statusCode), message)
 }
 
 func DecodeJSON(r *http.Request, dst any) error {

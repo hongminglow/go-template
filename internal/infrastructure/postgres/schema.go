@@ -1,29 +1,35 @@
 package postgres
 
 import (
-	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-func EnsureSchema(ctx context.Context, db *pgxpool.Pool) error {
-	const usersTableQuery = `
-		CREATE TABLE IF NOT EXISTS users (
-			id BIGSERIAL PRIMARY KEY,
-			username TEXT NOT NULL UNIQUE,
-			name TEXT NOT NULL,
-			email TEXT NOT NULL UNIQUE,
-			password TEXT NOT NULL,
-			gender TEXT NOT NULL,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`
+func EnsureSchema(dsn string) error {
+	slog.Info("running database migrations...")
 
-	if _, err := db.Exec(ctx, usersTableQuery); err != nil {
-		return fmt.Errorf("ensure users table: %w", err)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("could not get working directory: %w", err)
+	}
+	
+	migrationPath := filepath.Join(cwd, "migrations")
+	m, err := migrate.New("file://"+migrationPath, dsn)
+	if err != nil {
+		return fmt.Errorf("init migration failed: %w", err)
 	}
 
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migration up failed: %w", err)
+	}
+
+	slog.Info("database migrations completed successfully")
 	return nil
 }

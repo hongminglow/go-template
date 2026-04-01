@@ -11,7 +11,10 @@ import (
 	"github.com/hongminglow/go-template/internal/pkg/httpx"
 	"github.com/hongminglow/go-template/internal/system"
 	"github.com/hongminglow/go-template/internal/user"
+	"github.com/go-chi/cors"
 	"github.com/redis/go-redis/v9"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
+	_ "github.com/hongminglow/go-template/docs"
 )
 
 func NewRouter(systemHandler *system.Handler, userHandler *user.HTTPHandler, authHandler *auth.HTTPHandler, cfg config.Config, redisClient *redis.Client) http.Handler {
@@ -19,9 +22,18 @@ func NewRouter(systemHandler *system.Handler, userHandler *user.HTTPHandler, aut
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(httpx.LoggerMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	// Global Rate Limiter
 	// Token Bucket algorithm restricts burst traffic from a single IP.
@@ -41,6 +53,11 @@ func NewRouter(systemHandler *system.Handler, userHandler *user.HTTPHandler, aut
 		r.Get("/health", systemHandler.Health)
 		r.Get("/ready", systemHandler.Ready)
 		r.Get("/hello", systemHandler.Hello)
+
+		// Swagger Documentation
+		r.Get("/swagger/*", httpSwagger.Handler(
+			httpSwagger.URL("/api/v1/swagger/doc.json"), //The url pointing to API definition
+		))
 
 		// Public Routes
 		r.Route("/auth", func(r chi.Router) {
