@@ -52,6 +52,7 @@ func NewRouter(systemHandler *system.Handler, userHandler *user.HTTPHandler, aut
 			r.Use(httpx.JWTMiddleware(cfg.JWTSecret))
 
 			r.Route("/users", func(r chi.Router) {
+				r.Get("/me", userHandler.GetMe)
 				r.Get("/", userHandler.List)
 				r.Get("/{userID}", userHandler.GetByID)
 				r.Put("/{userID}", userHandler.Update)

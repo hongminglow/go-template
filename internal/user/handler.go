@@ -27,6 +27,24 @@ func NewHTTPHandler(service *Service) *HTTPHandler {
 
 
 
+func (h *HTTPHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+	userID, ok := httpx.GetUserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	userRecord, err := h.service.GetProfile(r.Context(), userID)
+	if err != nil {
+		handleUserError(w, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"data": userRecord,
+	})
+}
+
 func (h *HTTPHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit, err := parseQueryInt32(r, "limit")
 	if err != nil {
