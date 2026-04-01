@@ -1,66 +1,47 @@
 package httpx
 
 import (
+	"net"
 	"net/http"
-	"sync"
 	"time"
 
-	"golang.org/x/time/rate"
+	"github.com/go-redis/redis_rate/v10"
+	"github.com/redis/go-redis/v9"
 )
 
 // RateLimiterConfig configures the token bucket.
 type RateLimiterConfig struct {
-	RequestsPerSecond float64
+	RequestsPerSecond int
 	BurstSize         int
 }
 
-// TokenBucketRateLimiter implements a token bucket algorithm to rate limit incoming requests by IP.
-func TokenBucketRateLimiter(cfg RateLimiterConfig) func(http.Handler) http.Handler {
-	type client struct {
-		limiter  *rate.Limiter
-		lastSeen time.Time
-	}
-
-	var (
-		mu      sync.Mutex
-		clients = make(map[string]*client)
-	)
-
-	// Background job to clean up old IP entries from memory every minute
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			mu.Lock()
-			for ip, c := range clients {
-				if time.Since(c.lastSeen) > 3*time.Minute {
-					delete(clients, ip)
-				}
-			}
-			mu.Unlock()
-		}
-	}()
+// TokenBucketRateLimiter implements a token bucket algorithm to rate limit incoming requests by IP using Redis.
+func TokenBucketRateLimiter(rdb *redis.Client, cfg RateLimiterConfig) func(http.Handler) http.Handler {
+	limiter := redis_rate.NewLimiter(rdb)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Basic way to get client IP. Use real IP from proxy if behind load balancer.
+			// Extract only the IP address, stripping the ephemeral port
 			ip := r.RemoteAddr
-
-			mu.Lock()
-			if _, found := clients[ip]; !found {
-				// Initialize a new rate limiter for that specific IP
-				clients[ip] = &client{
-					limiter: rate.NewLimiter(rate.Limit(cfg.RequestsPerSecond), cfg.BurstSize),
-				}
+			if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+				ip = host
 			}
 
-			clients[ip].lastSeen = time.Now()
+			res, err := limiter.Allow(r.Context(), "rate_limit:ip:"+ip, redis_rate.Limit{
+				Rate:   cfg.RequestsPerSecond,
+				Burst:  cfg.BurstSize,
+				Period: time.Second,
+			})
+			if err != nil {
+				// If redis is down, it fails closed or open. We choose fail closed for safety.
+				WriteError(w, http.StatusInternalServerError, "internal server error")
+				return
+			}
 
-			if !clients[ip].limiter.Allow() {
-				mu.Unlock()
+			if res.Allowed == 0 {
 				WriteError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
-			mu.Unlock()
 
 			next.ServeHTTP(w, r)
 		})
@@ -68,29 +49,42 @@ func TokenBucketRateLimiter(cfg RateLimiterConfig) func(http.Handler) http.Handl
 }
 
 /*
-// LEAKY BUCKET IMPLEMENTATION:
+// LEAKY BUCKET IMPLEMENTATION (REDIS):
 // The Leaky Bucket algorithm processes requests at a constant, steady rate regardless of burstiness.
-// Think of a bucket that drips water at a constant rate. If water is poured in faster than it leaks out, the bucket overflows.
+// Think of a bucket that drips water at a constant rate. If water is poured in faster than it leaks out, it overflows (HTTP 429).
 //
-// In Go, leaky buckets are often implemented using channels, wait groups, or custom goroutine schedulers.
-// Wait, the golang.org/x/time/rate package acts as a token bucket, but you can also configure it to behave similarly to a leaky bucket
-// by keeping burst size small and requests consistent.
-// A pure leaky bucket explicitly queues requests or immediately shapes them into a constant drain rate.
-
-// Commented Example of Leaky Bucket Middleware logic:
+// In Go + Redis, you have a few ways to achieve this:
 //
-// import "go.uber.org/ratelimit" // Popular leaky bucket package
+// 1. GCRA (Generic Cell Rate Algorithm) via redis_rate:
+//    The package github.com/go-redis/redis_rate actually uses GCRA under the hood. 
+//    By setting Burst = Rate (e.g., 10 req/sec and 10 burst), it mathematically enforces a constant 
+//    interval between requests (1 request every 100ms), simulating a leaky bucket's "smooth dripping".
 //
-// func LeakyBucketRateLimiter(rps int) func(http.Handler) http.Handler {
-// 	// Creates a leaky bucket that allows X operations per second (constant processing rate)
-//  // ratelimit.New(rps) creates it.
-//  lim := ratelimit.New(rps)
+// 2. Redis Lists as a Queue (True Leaky Bucket):
+//    Requests push to a Redis List (RPUSH). A separate worker pops from the list (LPOP) at a constant rate.
+//    If the list length (LLEN) exceeds a threshold, the handler immediately returns 429 Too Many Requests.
 //
+// 3. Custom Lua Script:
+//    You can write a Lua script that tracks `water_level` and `last_drip_time`. 
+//    On every request, it calculates how much water leaked out since `last_drip_time`, 
+//    updates the `water_level`, and adds 1. If `water_level > bucket_capacity`, it rejects the request.
+//
+// Example GCRA configuration for Leaky Bucket behavior:
+// func LeakyBucketRateLimiter(rdb *redis.Client, rps int) func(http.Handler) http.Handler {
+// 	limiter := redis_rate.NewLimiter(rdb)
 // 	return func(next http.Handler) http.Handler {
 // 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 			// This will block until the bucket is ready to process the "drip".
-//          // If you don't want to block connection completely, you'd check a queue bound.
-// 			lim.Take()
+// 			ip := r.RemoteAddr
+// 			// Setting Rate = Burst ensures a strictly consistent flow (no bursting allows leaky bucket behavior)
+// 			res, _ := limiter.Allow(r.Context(), "leaky_limit:ip:"+ip, redis_rate.Limit{
+// 				Rate:   rps,
+// 				Burst:  rps, 
+// 				Period: time.Second,
+// 			})
+// 			if res.Allowed == 0 {
+// 				WriteError(w, http.StatusTooManyRequests, "bucket overflowing")
+// 				return
+// 			}
 // 			next.ServeHTTP(w, r)
 // 		})
 // 	}

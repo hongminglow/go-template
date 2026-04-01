@@ -11,9 +11,10 @@ import (
 	"github.com/hongminglow/go-template/internal/pkg/httpx"
 	"github.com/hongminglow/go-template/internal/system"
 	"github.com/hongminglow/go-template/internal/user"
+	"github.com/redis/go-redis/v9"
 )
 
-func NewRouter(systemHandler *system.Handler, userHandler *user.HTTPHandler, authHandler *auth.HTTPHandler, cfg config.Config) http.Handler {
+func NewRouter(systemHandler *system.Handler, userHandler *user.HTTPHandler, authHandler *auth.HTTPHandler, cfg config.Config, redisClient *redis.Client) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -27,7 +28,7 @@ func NewRouter(systemHandler *system.Handler, userHandler *user.HTTPHandler, aut
 	// - RequestsPerSecond: 10 (Replenishes 10 tokens per second).
 	// - BurstSize: 30 (Allows up to 30 immediate requests simultaneously before rate limiting).
 	// This helps block abuse/DDoS while keeping normal user interactions completely unrestrained.
-	r.Use(httpx.TokenBucketRateLimiter(httpx.RateLimiterConfig{
+	r.Use(httpx.TokenBucketRateLimiter(redisClient, httpx.RateLimiterConfig{
 		RequestsPerSecond: 10,
 		BurstSize:         30,
 	}))

@@ -53,7 +53,7 @@ func main() {
 	userHandler := user.NewHTTPHandler(userService)
 	authHandler := auth.NewHTTPHandler(userService, cfg.JWTSecret)
 
-	router := server.NewRouter(systemHandler, userHandler, authHandler, cfg)
+	router := server.NewRouter(systemHandler, userHandler, authHandler, cfg, redisPool)
 
 	httpServer := &http.Server{
 		Addr:         cfg.HTTPAddr,
