@@ -14,14 +14,18 @@ It gives beginners a clean structure, real API flow, Docker support, and Postgre
 - Dockerfile + Docker Compose setup
 - Environment-based configuration (`.env`)
 
-## What we are planning to add next
+## Challenges for future developers (What to build next)
 
-- Strong authentication flow (login, token handling, secure password strategy)
-- Better validation and standardized API error responses
-- Database migrations and seed examples
-- More test examples for beginners
+Now that the core enterprise foundation is built (Authentication, Migrations, Structured Logging, Redis Rate Limiting, and Swagger Docs), here are some advanced challenges you can build on top of this template:
 
-These planned features are not fully implemented yet, but this repo is structured so they can be added step by step.
+- **Role-Based Access Control (RBAC):** Build middleware that distinguishes between `admin` and standard `users`, restricting access to routes like "delete user".
+- **Background Task Workers:** Integrate `Asynq` or `Machinery` (using the existing Redis connection) to process heavy tasks asynchronously, like sending welcome emails or cleaning up data.
+- **Refresh Token Rotation:** Enhance the JWT authentication by implementing secure `HttpOnly` refresh cookies, and a Redis blacklisting mechanism for logging out.
+- **Integration Tests with Testcontainers:** Create a `/tests` suite that automatically spins up real, ephemeral Postgres and Redis containers to perform true end-to-end endpoint tests.
+- **OpenTelemetry & Metrics:** Attach structured tracing (OpenTelemetry) and Prometheus metrics to the `slog` logger and database queries to visualize your backend's performance.
+- **File Uploads (S3):** Create an `infrastructure/storage` module to handle multipart form data and cleanly stream profile picture uploads to an AWS S3 bucket.
+
+This repo is highly modularized, so adding any of these features simply involves creating a new module folder!
 
 ## Beginner quick start
 
